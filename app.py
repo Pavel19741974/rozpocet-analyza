@@ -23,7 +23,7 @@ check_password()
 
 # 📅 Nastavení aplikace
 st.set_page_config(page_title="Rozdělení nákladů", layout="wide")
-st.title("📊 Rozdělení marketingového rozpočtu podle ceny za kus")
+st.title("📊 Rozdělení nákladového rozpočtu podle ceny za kus")
 
 # 🔗 Automatické načtení CSV souboru
 @st.cache_data
