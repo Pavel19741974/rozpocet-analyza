@@ -1,7 +1,28 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import matplotlib.pyplot as plt
 
+# 🔐 Heslová ochrana
+
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == "nemeckyeshop2025":
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Zadej heslo:", type="password", on_change=password_entered, key="password")
+        st.stop()
+    elif not st.session_state["password_correct"]:
+        st.text_input("Zadej heslo:", type="password", on_change=password_entered, key="password")
+        st.error("❌ Nesprávné heslo")
+        st.stop()
+
+check_password()
+
+# 📊 Titulek a konfigurace
 st.set_page_config(page_title="Rozdělení nákladů", layout="wide")
 st.title("📊 Rozdělení marketingového rozpočtu podle ceny za kus")
 st.markdown("Nahraj CSV soubor `productStatistics.csv`")
@@ -84,14 +105,12 @@ if uploaded_file:
     st.success(f"📈 Celkový obrat: {obrat:,.2f} Kč")
     st.success(f"✅ Zadaný rozpočet: {rozpocet:,.2f} Kč")
 
-    # 🧠 Vysvětlivky k výpočtu
     st.markdown("#### ℹ️ Jak se počítají náklady:")
     st.markdown("""
     **Náklady celkem pro pásmo** = *(obrat daného pásma / celkový obrat) × celkový rozpočet*  
     **Náklad na 1 ks** = *náklady celkem / počet prodaných kusů v pásmu*
     """)
 
-    # 📊 Graf
     st.subheader("📊 Náklady na 1 kus podle cenových pásem")
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.bar(summary["cenove_pasmo"], summary["naklad_na_1_ks"], color="skyblue")
@@ -102,4 +121,3 @@ if uploaded_file:
     for i, v in enumerate(summary["naklad_na_1_ks"]):
         ax.text(i, v + 1, f"{v:.0f} Kč", ha='center', fontsize=8)
     st.pyplot(fig)
-    
