@@ -102,3 +102,4 @@ if uploaded_file:
     for i, v in enumerate(summary["naklad_na_1_ks"]):
         ax.text(i, v + 1, f"{v:.0f} Kč", ha='center', fontsize=8)
     st.pyplot(fig)
+    
