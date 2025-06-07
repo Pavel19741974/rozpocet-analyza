@@ -1,46 +1,41 @@
 import pandas as pd
-import streamlit as st
-import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import filedialog
+import getpass
 
-# 🔒 Přihlašovací ochrana
-def check_password():
-    def password_entered():
-        if st.session_state["password"] == "nemeckyeshop2025":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
+# 🔐 Přihlášení heslem
+spravne_heslo = "nemeckyeshop2025"
+zadane_heslo = getpass.getpass("🔐 Zadej heslo pro spuštění aplikace: ")
 
-    if "password_correct" not in st.session_state:
-        st.text_input("Zadejte heslo:", type="password", on_change=password_entered, key="password")
-        st.stop()
-    elif not st.session_state["password_correct"]:
-        st.text_input("Zadejte heslo:", type="password", on_change=password_entered, key="password")
-        st.error("❌ Nesprávné heslo")
-        st.stop()
+if zadane_heslo != spravne_heslo:
+    print("❌ Nesprávné heslo. Přístup odepřen.")
+    exit()
+else:
+    print("✅ Heslo správné. Pokračuji...\n")
 
-check_password()
+# 📂 Výběr CSV souboru ručně
+root = tk.Tk()
+root.withdraw()
+file_path = filedialog.askopenfilename(title="Vyber CSV soubor", filetypes=[("CSV files", "*.csv")])
 
-# 📅 Nastavení aplikace
-st.set_page_config(page_title="Rozdělení nákladů", layout="wide")
-st.title("📊 Rozdělení nákladového rozpočtu podle ceny za kus")
+if not file_path:
+    print("❌ Soubor nebyl vybrán.")
+    exit()
 
-# 🔗 Automatické načtení CSV souboru
-@st.cache_data
-def load_data():
-    return pd.read_csv("productStatistics.csv", encoding="cp1250", sep=";")
+# 1. Načtení dat
+produkt_list = pd.read_csv(file_path, encoding="cp1250", sep=";")
 
-df = load_data()
+# 2. Převod sloupců
+produkt_list["turnover"] = produkt_list["turnover"].astype(str).str.replace(",", ".")
+produkt_list["turnover"] = pd.to_numeric(produkt_list["turnover"], errors="coerce")
+produkt_list["count"] = pd.to_numeric(produkt_list["count"], errors="coerce")
 
-# ⚖️ Předzpracování dat
-df["turnover"] = df["turnover"].astype(str).str.replace(",", ".")
-df["turnover"] = pd.to_numeric(df["turnover"], errors="coerce")
-df["count"] = pd.to_numeric(df["count"], errors="coerce")
-df = df.dropna(subset=["turnover", "count"])
-df["cena_za_kus"] = df["turnover"] / df["count"]
+# 3. Odstranění neplatných řádků
+produkt_list = produkt_list.dropna(subset=["turnover", "count"])
+produkt_list["cena_za_kus"] = produkt_list["turnover"] / produkt_list["count"]
 
-# 🔹 Funkce pro přiřazení cenového pásma
-def assign_price_band(price):
+# 4. Cenová pásma (16)
+def assign_custom_price_band(price):
     if price > 1000:
         return (16, "16. pásmo (1001–3500 Kč)")
     elif price > 400:
@@ -74,27 +69,28 @@ def assign_price_band(price):
     else:
         return (1, "1. pásmo (0–10 Kč)")
 
-df[["pasmo_id", "cenove_pasmo"]] = df["cena_za_kus"].apply(assign_price_band).apply(pd.Series)
+produkt_list[["pasmo_id", "cenove_pasmo"]] = produkt_list["cena_za_kus"].apply(assign_custom_price_band).apply(pd.Series)
 
-# 💰 Základní výpočty
-obrat = df["turnover"].sum()
-pocet_ks = df["count"].sum()
-rozpocet = st.number_input("💰 Zadej rozpočet (Kč):", min_value=1_000_000, value=13_200_000, step=100_000)
+# 5. Výpočty
+celkovy_obrat_realita = produkt_list["turnover"].sum().round(2)
+celkovy_pocet_ks = produkt_list["count"].sum()
+total_budget = 13_200_000
 
-summary = df.groupby(["pasmo_id", "cenove_pasmo"]).agg(
+summary = produkt_list.groupby(["pasmo_id", "cenove_pasmo"]).agg(
     prodanych_kusu=("count", "sum"),
     cenove_rozpeti=("cena_za_kus", lambda x: f"{x.min():.2f} Kč – {x.max():.2f} Kč"),
     prumerna_cena=("cena_za_kus", "mean"),
     obrat=("turnover", "sum")
 ).reset_index()
 
-summary["naklad_celkem"] = summary["obrat"] / obrat * rozpocet
+summary["naklad_celkem"] = summary["obrat"] / celkovy_obrat_realita * total_budget
 summary["naklad_na_1_ks"] = summary["naklad_celkem"] / summary["prodanych_kusu"]
+
+# 6. Zaokrouhlení
 summary = summary.sort_values("pasmo_id").round(2)
 
-# 📋 Zobrazení tabulky
-st.subheader("📋 Výsledná tabulka")
-st.dataframe(summary[[
+# 7. Výstupní tabulka
+summary_final = summary[[
     "cenove_pasmo",
     "prodanych_kusu",
     "cenove_rozpeti",
@@ -102,27 +98,26 @@ st.dataframe(summary[[
     "obrat",
     "naklad_na_1_ks",
     "naklad_celkem"
-]], use_container_width=True)
+]]
 
-st.success(f"🛆 Celkem prodaných kusů: {int(pocet_ks):,}")
-st.success(f"📈 Celkový obrat: {obrat:,.2f} Kč")
-st.success(f"✅ Zadaný rozpočet: {rozpocet:,.2f} Kč")
+# 8. Výpis tabulky
+print("\n📋 Výsledná tabulka podle cenových pásem:\n")
+print(summary_final.to_string(index=False))
 
-# 🧐 Vysvětlení
-st.markdown("#### ℹ️ Jak se počítají náklady:")
-st.markdown("""
-**Náklady celkem pro pásmo** = *(obrat daného pásma / celkový obrat) × celkový rozpočet*  
-**Náklad na 1 ks** = *náklady celkem / počet prodaných kusů v pásmu*
-""")
+# 9. Dodatečné výpočty
+prumerny_naklad_hruby = celkovy_obrat_realita / celkovy_pocet_ks
+print(f"\n📎 Průměrný náklad na 1 ks v hrubém: {prumerny_naklad_hruby:.2f} Kč")
 
-# 📊 Graf
-st.subheader("📊 Náklady na 1 kus podle cenových pásem")
-fig, ax = plt.subplots(figsize=(10, 5))
-ax.bar(summary["cenove_pasmo"], summary["naklad_na_1_ks"], color="skyblue")
-ax.set_ylabel("Náklad na 1 ks (Kč)")
-ax.set_xlabel("Cenové pásmo")
-ax.set_xticklabels(summary["cenove_pasmo"], rotation=45, ha="right")
-ax.set_title("Rozložení nákladů na 1 kus podle cenových pásem")
-for i, v in enumerate(summary["naklad_na_1_ks"]):
-    ax.text(i, v + 1, f"{v:.0f} Kč", ha='center', fontsize=8)
-st.pyplot(fig)
+# 10. Skladové zásoby (ignorovat záporné hodnoty)
+if "stockAmount" in produkt_list.columns:
+    produkt_list["stockAmount"] = pd.to_numeric(produkt_list["stockAmount"], errors="coerce")
+    sklad_kusu = produkt_list.loc[produkt_list["stockAmount"] > 0, "stockAmount"].sum()
+    print(f"📦 Aktuální počet kusů skladem: {int(sklad_kusu):,}")
+else:
+    print("⚠️ Sloupec 'stockAmount' nebyl nalezen v CSV souboru.")
+
+# 11. Shrnutí
+print(f"\n📊 Celkový počet prodaných kusů: {int(celkovy_pocet_ks):,}")
+print(f"💰 Celkový obrat (ze sloupce 'turnover'): {celkovy_obrat_realita:,.2f} Kč")
+print(f"✅ Kontrolní součet rozpočtu: {summary['naklad_celkem'].sum():,.2f} Kč")
+print("📅 Rok: 2025")
